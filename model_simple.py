@@ -17,17 +17,17 @@ def add_remaining_self_loops(edge_index,
     num_nodes = maybe_num_nodes(edge_index, num_nodes)
     row, col = edge_index
 
-    mask = row != col
-    inv_mask = 1 - mask
-    loop_weight = torch.full(
+    mask = row != col # seleziona tutti gli indici che non sono indici della diagonale
+    inv_mask = torch.logical_not(mask) # indici della diagonale
+    loop_weight = torch.full( 
         (num_nodes, ),
         fill_value,
         dtype=None if edge_weight is None else edge_weight.dtype,
         device=edge_index.device)
 
     if edge_weight is not None:
-        assert edge_weight.numel() == edge_index.size(1)
-        remaining_edge_weight = edge_weight[inv_mask]
+        assert edge_weight.numel() == edge_index.size(1) # numel returns the number of elements in a Tensor
+        remaining_edge_weight = edge_weight[inv_mask] # prende solo i pesi degli edges della diagonale
         if remaining_edge_weight.numel() > 0:
             loop_weight[row[inv_mask]] = remaining_edge_weight
         edge_weight = torch.cat([edge_weight[mask], loop_weight], dim=0)
@@ -105,12 +105,17 @@ class SymSimGCNNet(torch.nn.Module):
             dropout: dropout rate in final linear layer
             domain_adaptation: RevGrad
         """
-        super(SymSimGCNNet, self).__init__()
-        self.domain_adaptation = domain_adaptation
-        self.num_nodes = num_nodes
-        self.xs, self.ys = torch.tril_indices(self.num_nodes, self.num_nodes, offset=0)
+        super(SymSimGCNNet, self).__init__() #this is a thing that is always done
+        self.domain_adaptation = domain_adaptation #Il blocco che cerca di foolare il classifier
+        self.num_nodes = num_nodes #number of channels
+        self.xs, self.ys = torch.tril_indices(self.num_nodes, self.num_nodes, offset=0) 
+        #ritorna gli indici della lower-triangula part di una matrice nodes*nodes
         edge_weight = edge_weight.reshape(self.num_nodes, self.num_nodes)[self.xs, self.ys] # strict lower triangular values
+        # edge_weight e' la adjacency matrix. Viene re-shapeata per sicurezza e poi vengono presi
+        # solo gli indici del lower triangle.
         self.edge_weight = nn.Parameter(edge_weight, requires_grad=learn_edge_weight)
+        # Questo e' il modo per creare una variabile su Pythorch. Se requires_grad e'
+        # True, allora la variabile viene ottimizzata.
         self.dropout = dropout
         self.conv1 = NewSGConv(num_features=num_features, num_classes=num_hiddens[0], K=K)
         self.fc = nn.Linear(num_hiddens[0], num_classes)
