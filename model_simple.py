@@ -139,4 +139,5 @@ class SymSimGCNNet(torch.nn.Module):
         x = global_add_pool(x, data.batch, size=batch_size)
         x = F.dropout(x, p=self.dropout, training=self.training)
         x = self.fc(x)
+        x = F.log_softmax(x)
         return x, domain_output
