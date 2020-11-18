@@ -120,7 +120,7 @@ class SymSimGCNNet(torch.nn.Module):
         self.conv1 = NewSGConv(num_features=num_features, num_classes=num_hiddens[0], K=K)
         self.fc = nn.Linear(num_hiddens[0], num_classes)
         if self.domain_adaptation in ["RevGrad"]:
-            self.domain_classifier = nn.Linear(num_hiddens[0], 2)
+            self.domain_classifier = F.softmax(nn.Linear(num_hiddens[0], 2))
 
     def forward(self, data, alpha=0):
         batch_size = len(data.y)
