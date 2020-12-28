@@ -24,9 +24,9 @@ def global_channels(adjacency_matrix, filtered_channels, channel_tuples):
   return adjacency_matrix
 
 # TODO: put right folder, maybe pass it as parameter.
-def get_adjacency_matrix():
-  channel_order = pd.read_excel("/content/seed-iv/Channel Order.xlsx", header=None)
-  channel_location = pd.read_csv("/content/seed-iv/Channel Location.txt", sep= ",")
+def get_adjacency_matrix(path_order, path_location):
+  channel_order = pd.read_excel(path_order, header=None)
+  channel_location = pd.read_csv(path_location, sep= ",")
   filtered_df = pd.DataFrame(columns=["Channel", "X", "Y", "Z"])
   for channel in channel_location["Channel"]:
     for used in channel_order[0]:
