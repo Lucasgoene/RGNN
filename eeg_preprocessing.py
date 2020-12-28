@@ -171,7 +171,7 @@ def load_data_subjects(labels):
         X = scipy.io.loadmat(file_path)['de_LDS{}'.format(videoclip+1)][:,:,:]
         for t in range(X.shape[1]):
           x = torch.tensor(X[:, t, :]).float()
-          y = torch.tensor(session_labels[videoclip]).float()
+          y = torch.tensor([session_labels[videoclip]]).float()
           edge_index = torch.tensor([np.arange(62*62)//62, np.arange(62*62)%62])
           data = torch_geometric.data.Data(x=x, y=y, edge_index=edge_index)
 
