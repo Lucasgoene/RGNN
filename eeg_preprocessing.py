@@ -150,37 +150,45 @@ def create_data_loaders(data_list,subjects_list,batch_size):
 # --- Subject dependent ---
 
 def load_data_subjects(labels):
-  list_train = {}
-  list_val = {}
-  for i in range(1, 16):
-    list_train[str(i)] = []
-    list_val[str(i)] = []
-
-  for session in range(1, 4):
+  eeg_dict = {}
+  for session in range (1, 4):
     print("WE ARE IN SESSION: {:d}".format(session))
     session_labels = labels[str(session)]
     session_folder = "/content/data/"+str(session)
-    patient_nr = 1
-    for patient in os.listdir(session_folder):
-      file_path = session_folder+"/"+patient
-      counter_labels = np.zeros(4, dtype=int)
-      print("THIS IS PATIENT: {:d}".format(patient_nr))
+    for file in os.listdir(session_folder):
+      p=int(file.split("_")[0])
+      file_path = "{}/{}".format(session_folder,file)
+      print("THIS IS PATIENT: {:d}".format(p))
       for videoclip in range(24):
-        index = np.argmax(session_labels[videoclip])
-        counter_labels[index] = counter_labels[index]+1
-        X = scipy.io.loadmat(file_path)['de_LDS{}'.format(videoclip+1)][:,:,:]
-        for t in range(X.shape[1]):
-          x = torch.tensor(X[:, t, :]).float()
-          y = torch.tensor([session_labels[videoclip]]).float()
+        x = scipy.io.loadmat(file_path)['de_LDS{}'.format(videoclip+1)]
+        if p not in eeg_dict.keys():
+          eeg_dict[p] = {
+            "neutral": {"train": [],"val": []},
+            "sadness": {"train": [],"val": []},
+            "fear": {"train": [],"val": []},
+            "happiness": {"train": [],"val": []}
+          }
+        y=session_labels[videoclip]
+        emotion=list(eeg_dict[p].keys())[np.argmax(y)]
+        data=(x,y)
+        if (len(eeg_dict[p][emotion]["train"]) - (session-1)*4) <4:
+          eeg_dict[p][emotion]["train"].append(data)
+        else:
+          eeg_dict[p][emotion]["val"].append(data)
+  eeg_dict_no_emo={}
+  for p in eeg_dict.keys():
+    eeg_dict_no_emo[p]={"train": [],"val": []}
+    for phase in ["train","val"]:
+      data=[]
+      for emotion in eeg_dict[p].keys():
+        for X,y in eeg_dict[p][emotion][phase]:
+          y = torch.tensor([y]).float()
           edge_index = torch.tensor([np.arange(62*62)//62, np.arange(62*62)%62])
-          data = torch_geometric.data.Data(x=x, y=y, edge_index=edge_index)
-
-          if counter_labels[index] >= 5:
-            list_val[str(patient_nr)].append(data)
-          else:
-            list_train[str(patient_nr)].append(data)
-      patient_nr+=1
-  return list_train, list_val
+          for t in range(X.shape[1]):
+            x = torch.tensor(X[:, t, :]).float()
+            data.append(torch_geometric.data.Data(x=x, y=y, edge_index=edge_index))
+      eeg_dict_no_emo[p][phase]=data
+  return eeg_dict_no_emo
 
 def create_data_loaders_subjects(list_train, list_val, batch_size):
   loader_train = {}
