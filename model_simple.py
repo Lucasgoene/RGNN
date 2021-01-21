@@ -121,6 +121,13 @@ class SymSimGCNNet(torch.nn.Module):
         self.fc = nn.Linear(num_hiddens[0], num_classes)
         if self.domain_adaptation in ["RevGrad"]:
             self.domain_classifier = nn.Linear(num_hiddens[0], 2)
+        self.apply(self.weight_init)
+
+    def weight_init(self,m):
+      if isinstance(m, nn.Linear):
+        nn.init.xavier_uniform_(m.weight)
+      if isinstance(m, NewSGConv):
+        nn.init.xavier_uniform_(m.lin.weight)
 
     def forward(self, data, alpha=0):
         batch_size = len(data.y)
