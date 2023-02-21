@@ -40,20 +40,13 @@ def maybe_num_nodes(index, num_nodes=None):
 # - edge_weight: Tensor (1, num_edges), which contains the weight of the i-th edge for each col i
 # - fill_value=1: value to fill the diagonal with
 # - num_nodes: number of nodes present, if known (it will be derived otherwise)
-def add_remaining_self_loops(edge_index,
-                             edge_weight=None,
-                             fill_value=1,
-                             num_nodes=None):
+def add_remaining_self_loops(edge_index, edge_weight=None, fill_value=1, num_nodes=None):
     num_nodes = maybe_num_nodes(edge_index, num_nodes)  # Derive num_nodes with "maybe_num_nodes" if unknown
     row, col = edge_index   # obtain the two rows of edge_index as two separate tensors, one of edge rows (x's) and the other of edge cols (y's)
+    row = row.long()
     mask = row != col   # a bit-wise mask of all matrix cells, excluding the diagonal
     inv_mask = torch.logical_not(mask) # inverted mask, that is ONLY the diagonal
-    loop_weight = torch.full(     # fill a Tensor (num_nodes, 1) full of fill_value ( = 1)
-        (num_nodes, ),
-        fill_value,
-        dtype=None if edge_weight is None else edge_weight.dtype,
-        device=edge_index.device)
-
+    loop_weight = torch.full((num_nodes, ), fill_value, dtype=None if edge_weight is None else edge_weight.dtype, device=edge_index.device)
     if edge_weight is not None:
         assert edge_weight.numel() == edge_index.size(1)  # Assert that the number of edge_weights is the same as the number of edge_indices couples
         remaining_edge_weight = edge_weight[inv_mask]   # Subset for the edge_weights of edges on the diagonal
@@ -227,39 +220,43 @@ def get_adjacency_matrix():
 # Functions to create dataloaders from the SEED-IV dataset
 
 # --- Subject dependent ---
-def dependent_loaders(batch_size, shuffle):
+def dependent_loaders(batch_size, shuffle, root_dir):
   session1_label = [1,2,3,0,2,0,0,1,0,1,2,1,1,1,2,3,2,2,3,3,0,3,0,3];
   session2_label = [2,1,3,0,0,2,0,2,3,3,2,3,2,0,1,1,2,1,0,3,0,1,3,1];
   session3_label = [1,2,2,1,3,3,3,1,1,2,1,0,2,3,3,0,2,3,0,0,2,0,1,0];
   labels = [session1_label, session2_label, session3_label]
   eeg_dict = {}
+
   print("--- SUBJECT DEPENDENT LOADER ---")
-  for session in range (1, 4):
-    print("WE ARE IN SESSION: {:d}".format(session))
-    session_labels = labels[session-1]
-    session_folder = "/content/drive/My Drive/SEED_IV/eeg_feature_smooth/"+str(session)
+  
+  for session in range (0, 3):
+    print("WE ARE IN SESSION: {:d}".format(session + 1))
+    session_labels = labels[session]
+    session_folder = root_dir + "eeg_feature_smooth/" + str(session + 1)
+
     for file in os.listdir(session_folder):
-      p=int(file.split("_")[0])
+      subject_number = int(file.split("_")[0])
       file_path = "{}/{}".format(session_folder,file)
-      print("THIS IS PATIENT: {:d}".format(p))
-      # Objective: create for each subject a dict containing a list of "train" Data objects and a list of "test" Data objects
-      if p not in eeg_dict.keys():
-          eeg_dict[p] = {
-              "train":[],
-              "test":[]
-          }
-      for videoclip in range(24): # There are 24 trials per subject, following the "session_label" label order
-        X = scipy.io.loadmat(file_path)['de_LDS{}'.format(videoclip+1)]
-        y = session_labels[videoclip]
+      print("THIS IS PATIENT: {:d}".format(subject_number))
+      
+      # Create a dict containing a "train" Data objects List and a "test" Data objects List, for each subject
+      if subject_number not in eeg_dict.keys():
+          eeg_dict[subject_number] = {"train": [], "test": []}
+
+      # Each subject has 24 trails
+      for trial in range(24): 
+        X = scipy.io.loadmat(file_path)['de_LDS{}'.format(trial + 1)]
+        y = session_labels[trial]
         y = torch.tensor([y]).long()
         edge_index = torch.tensor([np.arange(62*62)//62, np.arange(62*62)%62])
+
         for t in range(X.shape[1]):
           x = torch.tensor(X[:, t, :]).float()
           x = (x-x.mean())/x.std()
-          if videoclip < 16:  # Put the first 16 in training, and the last 8 in testing
-            eeg_dict[p]["train"].append(torch_geometric.data.Data(x=x, y=y, edge_index=edge_index))
+          if trial < 16:  # Put the first 16 in training, and the last 8 in testing
+            eeg_dict[subject_number]["train"].append(torch_geometric.data.Data(x=x, y=y, edge_index=edge_index))
           else:
-            eeg_dict[p]["test"].append(torch_geometric.data.Data(x=x, y=y, edge_index=edge_index))
+            eeg_dict[subject_number]["test"].append(torch_geometric.data.Data(x=x, y=y, edge_index=edge_index))
   
   loaders_dict = {}
 
@@ -274,7 +271,7 @@ def dependent_loaders(batch_size, shuffle):
 
 
 # --- Subject independent ---
-def independent_loaders(batch_size, shuffle):
+def independent_loaders(batch_size, shuffle, root_dir):
   session1_label = [1,2,3,0,2,0,0,1,0,1,2,1,1,1,2,3,2,2,3,3,0,3,0,3];
   session2_label = [2,1,3,0,0,2,0,2,3,3,2,3,2,0,1,1,2,1,0,3,0,1,3,1];
   session3_label = [1,2,2,1,3,3,3,1,1,2,1,0,2,3,3,0,2,3,0,0,2,0,1,0];
@@ -284,23 +281,23 @@ def independent_loaders(batch_size, shuffle):
   for session in range (1, 4):
     print("WE ARE IN SESSION: {:d}".format(session))
     session_labels = labels[session-1]
-    session_folder = "/content/drive/My Drive/SEED_IV/eeg_feature_smooth/"+str(session)
+    session_folder = root_dir+"eeg_feature_smooth/"+str(session)
     for file in os.listdir(session_folder):
-      p=int(file.split("_")[0])
+      subject_number = int(file.split("_")[0])
       file_path = "{}/{}".format(session_folder,file)
-      print("THIS IS PATIENT: {:d}".format(p))
+      print("THIS IS PATIENT: {:d}".format(subject_number))
       # Objective: create for each subject a single list of Data object (all samples of a subject are used as either training or testing)
-      if p not in eeg_dict.keys():
-          eeg_dict[p] = []
-      for videoclip in range(24): # There are 24 trials per subject, following the "session_label" label order
-        X = scipy.io.loadmat(file_path)['de_LDS{}'.format(videoclip+1)]
-        y = session_labels[videoclip]
+      if subject_number not in eeg_dict.keys(): eeg_dict[subject_number] = []
+
+      for trial in range(24): # There are 24 trials per subject, following the "session_label" label order
+        X = scipy.io.loadmat(file_path)['de_LDS{}'.format(trial+1)]
+        y = session_labels[trial]
         y = torch.tensor([y]).long()
         edge_index = torch.tensor([np.arange(62*62)//62, np.arange(62*62)%62])
         for t in range(X.shape[1]):
           x = torch.tensor(X[:, t, :]).float()
           x = (x-x.mean())/x.std()
-          eeg_dict[p].append(torch_geometric.data.Data(x=x, y=y, edge_index=edge_index))
+          eeg_dict[subject_number].append(torch_geometric.data.Data(x=x, y=y, edge_index=edge_index))
   
   loaders_dict = {}
 
@@ -330,7 +327,7 @@ def subject_dependent_training(dep_loader, emo_DL=True, rand_adj=False, L1_alpha
   ])
 
   for i in range(1, 16):
-    print("PAZIENTE no. "+str(i)+":")
+    print("Patient no. "+str(i)+":")
     loss_history = {'train': [], 'test': []}
     accuracy_history = {'train': [], 'test': []}
 
@@ -408,6 +405,9 @@ def subject_dependent_training(dep_loader, emo_DL=True, rand_adj=False, L1_alpha
         "best_losses": {"train": loss_history["train"][-1], "test": loss_history["test"][-1]},
         "best_accuracies":{"train":accuracy_history["train"][-1], "test": accuracy_history["test"][-1]}
     }
+    print(str(i))
+    print(model_stats[i]["best_losses"]['train'])
+    break
   return model_stats
 
 #----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -529,6 +529,8 @@ def subject_independent_training(indep_loader, nodeDAT="RevGrad", emo_DL=True, r
         "best_losses": {"train": loss_history["train"][-1], "test": loss_history["test"][-1]},
         "best_accuracies":{"train":accuracy_history["train"][-1], "test": accuracy_history["test"][-1]}
     }
+    print(str(i))
+    print(model_stats[i]["best_losses"]['train'])
   return model_stats
 
 #######################################################################################
@@ -555,7 +557,8 @@ def graph_res(i, res):
 def show_results(res):
   for i in range(1,16):
     print(i)
-    graph_res(str(i), res)
+    print(res[i]["best_losses"]['train'])
+    graph_res(i, res)
     print("\n\n\n")
 
 #######################################################################################
@@ -568,13 +571,13 @@ if __name__ == "__main__":
     # Correctly setup the device
     dev = ("cuda" if torch.cuda.is_available() else "cpu")
 
-    from google.colab import drive  # Connect to Google Drive instead of local dataset
-    drive.mount("/content/drive", force_remount=True)
-    root_dir = "/content/drive/My Drive/SEED_IV/"       # Change this line to use a local root directory
+    # from google.colab import drive  # Connect to Google Drive instead of local dataset
+    # drive.mount("/content/drive", force_remount=True)
+    root_dir = "./SEED-IV/"       # Change this line to use a local root directory
 
     # Create subject-dependent and independent loaders, with batch_size=16 and shuffle
-    dep_loader = dependent_loaders(16, True)
-    indep_loader = independent_loaders(16, True)
+    dep_loader = dependent_loaders(16, True, root_dir)
+    indep_loader = independent_loaders(16, True, root_dir)
 
     ## SUBJECT-DEPENDENT training and result plotting
     subject_dependent_result = subject_dependent_training(dep_loader)
